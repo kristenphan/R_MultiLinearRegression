@@ -12,5 +12,5 @@ If you're currently taking the same course, please refrain yourself from checkin
 <br/>
 __Assignment Description:__
 <br/>
-Perform exploratory data analysis (EDA), multi regression modeling, and prediction to explore attributes which make a movie popular.
+Perform exploratory data analysis (EDA), multi regression modeling, and prediction to explore attributes associatedd with popular movies.
 Final result: http://rpubs.com/kristenphan/lin-reg-model-capstone
