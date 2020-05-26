@@ -1,0 +1,490 @@
+---
+title: "Modeling and prediction for movies"
+Author:  "Kristen Phan"  
+output: 
+  html_document: 
+    toc: true
+    fig_height: 4
+    highlight: pygments
+    theme: space
+    toc_float: true
+---
+
+## Setup
+This is the capstone project by Kristen Phan for Duke University's Linear Regression and Modeling course ([Course URL](https://www.coursera.org/learn/linear-regression-model)).
+
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+Make sure your data and R Markdown files are in the same directory. When loaded
+your data file will be called `movies`. Delete this note when before you submit 
+your work. 
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+### Background information:
+The data set is comprised of 651 randomly sampled movies produced and released before 2016 about how much audiences and critics like movies as well as numerous other variables about the movies. This dataset is provided below, and it includes information from Rotten Tomatoes and IMDB for a random sample of movies.
+<br />
+<br />
+More information on the dataset's codebook can be found [here](https://d3c33hcgiwev3.cloudfront.net/_73393031e98b997cf2445132f89606a1_movies_codebook.html?Expires=1590624000&Signature=e6pAcbyk90RQEwFEbjsjkGJIPJAX5LYaz8h7IDfa1CtjvsNHxISi-LlskYU-nV1T9AsBMFLuMrtiNvHjZ3JeCaqHMGKYA7HfAcJTVivQDqbpbWe3aodqvNeTRb~-HzI7VT28Jl74dB~o-p1UCiEHcgcOq19FUefmiw2sPyF3U7E_&Key-Pair-Id=APKAJLTNE6QMUY6HBC5A).
+<br />
+
+### Generalization:
+Because the movies were sampled randomly, the findings of this study can be generalized for movies that were produced nad released beofre 2016. 
+<br />
+
+### Causation:
+Because this is an observational study, its findings only imply association and not causation. 
+<br />
+
+* * *
+
+## Part 2: Research question
+What attributes are associated with popular movies?
+<br />
+The purpose of this study is to explore attributes associated with a movie's popularity and build a regression model to predict a movie's popularity given its attributes. Keep in mind that the attributes we are about to analyze are not the cause of a movie's popularity. 
+<br />
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+First, we take a peek at the dataset.
+
+```{r }
+movies <- movies[complete.cases(movies), ]
+summary(movies)
+```
+
+
+First, it's worth noting that a movie's type (documentary, featured file, or TV movie) might affect its popularity depending on the audience taste, so we will focus only Featured Film in this study (sample size = 591 feature films).
+
+```{r filter-featured-film}
+feature_film <- movies %>% filter(title_type == "Feature Film")
+nrow(feature_film)
+```
+
+Second, we need to determine how to measure a movie's popularity. If we use the criteria of whether a movie is in the top 200 box office list, we will end up with a small sample of 15 movies.
+
+```{r top-200-box}
+table(feature_film$top200_box)
+```
+
+Alternatively, we can use the number of votes on IMDb as a proxy of the movie's popularity, assuming that strong reaction from movie watchers will prompt them to cast a vote on IMDb. 
+<br />
+<br />
+One might assume that a great movie with high IDMb rating would reasonably has a high number of votes. However, looking at the below linear model (IMDb number of votes = explanatory variable; IMDb rating = predicted variable), we can see from the scatter plot and the residuals plot that there is no correlation between IMDb number of votes and IMDb rating.
+
+```{r scatter-plot}
+ggplot(data=feature_film, aes(x=imdb_num_votes, y=imdb_rating)) + geom_point()
+```
+
+
+```{r residuals-plot-residuals-vs-predicted-values}
+m1 <- lm(imdb_rating ~ imdb_num_votes, data=feature_film)
+ggplot(data=m1, aes(x=.fitted, y=.resid)) + 
+  geom_point() +
+  geom_hline(yintercept=0, linetype='dashed') +
+  xlab('fitted value') +
+  ylab('residuals')
+```
+
+A possible explanation is that some high quality movies with a high IMDb rating might simply not appeal to the general public. A high number of IMDb votes, on the other hand, indicates high audience engagement. For that reason, we choose IMDb number of votes over IMDb rating as our measure for a movie's popularity.
+
+<br />
+Next we will kick things off by analyzing a few attributes which are likely to influence a movie's popularity:
+<br />
+* genre: Genre of movie (Action & Adventure, Comedy, Documentary, Drama, Horror, Mystery & Suspense, Other)
+<br />
+* thtr_rel_month: Month the movie is released in theaters
+<br />
+* director: Director of the movie
+<br />
+* studio: Studio that produced the movie
+<br />
+* mpaa_rating: MPAA rating of the movie (G, PG, PG-13, R, Unrated)
+<br />
+  
+  
+  
+Let's examine movie's popularity among different genres. 
+
+```{r popularity-vs-genre}
+ggplot(data = feature_film, aes(genre, imdb_num_votes)) + 
+  geom_col(fill='#E69F00') + 
+  labs(title="Movie Popularity in Relation to Genre") + 
+  coord_flip()
+
+feature_film %>% group_by(genre) %>% summarise(count = sum(imdb_num_votes)) %>% arrange(desc(count))
+```
+
+Drama movies seem to invoke the most audience engagement. Next, we take a look at popularity among movies in relation to the release month and the movie genre. 
+
+```{r popularity-vs-theater-release-month-vs-genre}
+ggplot(data = feature_film, aes(x = thtr_rel_month, y = imdb_num_votes)) + 
+  geom_bar(stat="identity", fill='#E69F00') + 
+  theme(axis.text.x = element_text(size=5)) +
+  labs(title="Movie Popularity in Relation to Theater Release Month and Genre", x = "Release Month", y="IMDb Number of Votes") +
+  facet_wrap(~genre) 
+```
+
+Glancing from the above plot, release time and audience reaction seem to be associated for Action & Adventure and Drama movies. 
+<br />
+For Action & Adventure movies, audience have storngest reaction to movies released during the summer. 
+<br />
+For Drama movies, audience reaction goes up substantially during the holidays (October and December)
+
+
+Next, we might consider whether the director of a movie is associated with its popularity. However, as shown below, the movies in our sample mostly were directly by diffrent directors, so it is not quite feasible to assess the association between a movie's popularity and its director. 
+
+
+```{r director-count}
+length(unique(feature_film$director))
+length(feature_film$director)
+```
+
+However, we can analyze the association between movies' popularity among different studios producing the movies. 
+<br />
+We will look into the popularity of movies produced by the top 10 studios by the number of movies they have produced (up until 2016). 
+
+```{r stack-plot-popularity-vs-studio-vs-genre-PENDINGGGGGGGG}
+top10_studio <- feature_film %>% 
+                  filter(!is.na(studio)) %>%
+                  group_by(studio) %>% 
+                  summarise(count = n()) %>% 
+                  arrange(desc(count)) %>% 
+                  top_n(10) %>% 
+                  select(studio)
+
+top10_studio <- as.list(top10_studio)
+top10_studio
+
+
+str(subset(feature_film, studio %in% top10_studio)$studio)
+  
+```
+
+
+
+* * *
+
+## Part 4: Modeling
+
+### Model diagnostics
+Before we discuss a MLR, we need to check if the dataset meets all 4 conditions for a MLR.
+
+In our model, we will exclude the following variables:
+<br />
+- "actor1" through "actor5": refer to whether the movie casts an actor or actress who won a best actor or actress Oscar, so they add no value to the prediction of a movie's popularity. 
+<br />
+- "imdb_url" and "rt_url": have no relation to the movies
+<br />
+- "title", "director", "studio", "title type": There categories contains unique data points (ie. outliners) and should be excluded.
+
+Now we are going to build a model with all except for the attributes mentioned above and check if all explantory variables meet the conditions. 
+
+Numerical, explanatory variables include: 
+1. runtime
+2. imdb_rating
+3. critics_score
+4. audience_score
+
+```{r recompute-full-MLR-model-and-scatter-plot-1}
+# condition 1: linear relationship between numerical, explanatory variables and response variable (imdb_num_votes)
+m_full <- lm(imdb_num_votes ~ genre + mpaa_rating +
+                              thtr_rel_year + thtr_rel_month + thtr_rel_day + 
+                              dvd_rel_year + dvd_rel_month + dvd_rel_day + 
+                              best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box +
+                              critics_rating + audience_rating + 
+                              runtime + imdb_rating + critics_score + audience_score,   
+             data = feature_film)
+
+plot(m_full$residuals ~ feature_film$runtime)
+plot(m_full$residuals ~ feature_film$imdb_rating)
+plot(m_full$residuals ~ feature_film$critics_score)
+plot(m_full$residuals ~ feature_film$audience_score)
+
+# condition 2: nearly normal residuals with mean 0
+hist(m_full$residuals)
+qqnorm(m_full$residuals)
+qqline(m_full$residuals)
+
+# condition 3: constant variability  of residuals --> randomly scattered in a band with consitant width around 0. no fan shape
+plot(m_full$residuals ~ m_full$fitted.values)
+plot(abs(m_full$residuals) ~ m_full$fitted.values)
+
+# condition 4: indepdent residuals --> no time series structure
+plot(m_full$residuals)
+
+```
+
+From the above scatter plot, critics_score and audience_score seem to be most linearly related to the reponse variable while runtime and imdb_rating don't. For that reason, we will exclude runtime and imdb_rating from our model and recompute the model. 
+
+```{r recompute-full-MLR-model-and-scatter-plot-2}
+# condition 1: linear relationship between numerical, explanatory variables and response variable (imdb_num_votes)
+m_full <- lm(imdb_num_votes ~ genre + mpaa_rating +
+                              thtr_rel_year + thtr_rel_month + thtr_rel_day + 
+                              dvd_rel_year + dvd_rel_month + dvd_rel_day + 
+                              best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box +
+                              critics_rating + audience_rating + 
+                              critics_score + audience_score,   
+             data = feature_film)
+
+plot(m_full$residuals ~ feature_film$critics_score)
+plot(m_full$residuals ~ feature_film$audience_score)
+
+# condition 2: nearly normal residuals with mean 0
+hist(m_full$residuals)
+qqnorm(m_full$residuals)
+qqline(m_full$residuals)
+
+# condition 3: constant variability  of residuals --> randomly scattered in a band with consitant width around 0. no fan shape
+plot(m_full$residuals ~ m_full$fitted)
+plot(abs(m_full$residuals) ~ m_full$fitted)
+
+# condition 4: indepdent residuals --> no time series structure
+plot(m_full$residuals)
+
+```
+
+Based on the above visuals, our model seems to meet all condiitons except for condition #3 - constant variability of the residuals. However, because we have a large sample, this might be not an important violations of the model.  
+
+### Model finetuning
+
+In this section, we will further finetune the model using using backward elimination with P-val. Although using adjusted R squared might yield a more reliable model, it's less computationally intensive to use p-val, and the resulting model will be relatively similar to that by adjusted R squared. The model will be used later to predict a movie's popularity given its attributes with a movie's popularity measured by the number of IMDb votes. 
+
+Below is the summary of the current model
+
+```{r model-summary}
+summary(m_full)
+```
+
+There are a few statistical points worth noting.
+1. P-val:
+Because p-val = 2.2e-16 < 0,  the data provides sufficient evidence that the set of explanatory variables and the response variable (proxy of a movie's popularity) included in the model are associated. 
+
+2. Multiple R-squared of 0.4449
+44.49% of variation in the response variable is current explained by the model. 
+
+3. Estimate of best_pic_nomyes = 43671.0
+The number of imdb votes for movies which have been nomiated for best picture is 43671 votes higher than those without a nomination for best picture. 
+
+Next, we will drop one variable with the highest p-val that is greater than our chosen significant level 5%. This time, we will drop thtr_rel_day with p-val of 0.742906 
+
+```{r drop-thtr_rel_day}
+m1 <- lm(imdb_num_votes ~ genre + mpaa_rating +
+                          thtr_rel_year + thtr_rel_month + 
+                          dvd_rel_year + dvd_rel_month + dvd_rel_day + 
+                          best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+summary(m1)
+```
+
+Keep repeating this step.
+
+```{r drop-mpaa_rating}
+m2 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + thtr_rel_month + 
+                          dvd_rel_year + dvd_rel_month + dvd_rel_day + 
+                          best_pic_nom + best_pic_win + best_actor_win + best_actress_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+
+summary(m2)
+```
+
+```{r drop-best_actor_winyes}
+m3 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + thtr_rel_month + 
+                          dvd_rel_year + dvd_rel_month + dvd_rel_day + 
+                          best_pic_nom + best_pic_win + best_actress_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+
+
+summary(m3)
+```
+
+
+```{r drop-dvd_rel_month}
+m4 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + thtr_rel_month + 
+                          dvd_rel_year + dvd_rel_day + 
+                          best_pic_nom + best_pic_win + best_actress_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+
+
+summary(m4)
+```
+
+```{r drop-best_actress_win}
+m5 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + thtr_rel_month + 
+                          dvd_rel_year + dvd_rel_day + 
+                          best_pic_nom + best_pic_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+
+
+summary(m5)
+```
+
+
+```{r drop-dvd_rel_year}
+m6 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + thtr_rel_month + 
+                          dvd_rel_day + 
+                          best_pic_nom + best_pic_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+
+
+summary(m6)
+```
+
+
+```{r drop-dvd_rel_day}
+m7 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + thtr_rel_month + 
+                          best_pic_nom + best_pic_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+
+
+summary(m7)
+```
+
+
+```{r drop-thtr_rel_month}
+m8 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + 
+                          best_pic_nom + best_pic_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          critics_score + audience_score,   
+             data = feature_film)
+
+
+summary(m8)
+```
+
+```{r drop-critics_score}
+m9 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + 
+                          best_pic_nom + best_pic_win + best_dir_win + top200_box +
+                          critics_rating + audience_rating + 
+                          audience_score,   
+             data = feature_film)
+
+
+summary(m9)
+```
+
+
+```{r drop-audience_rating}
+m10 <- lm(imdb_num_votes ~ genre +
+                          thtr_rel_year + 
+                          best_pic_nom + best_pic_win + best_dir_win + top200_box +
+                          critics_rating +
+                          audience_score,   
+             data = feature_film)
+
+
+summary(m10)
+```
+
+
+
+At this point, we have reached the final model as all individual explanatory variables are less than the significant level 5%.
+
+
+
+* * *
+
+## Part 5: Prediction
+
+In this section, we will attempt to predict the number of IMDb votes for a 2016 movie La La Land.
+
+From this IMDb [webpage](https://www.imdb.com/title/tt3783958/?ref_=tt_rt), the movie has 478,139 votes and the following attributes:
+- genre: comedy, drama, music. 
+- thtr_rel_year: 2016
+- best_pic_nom = "yes"
+- best_pic_win: no
+- top200_box: no
+- critics_rating: certified fresh
+- runtime: 128
+- imdb_rating: 8
+- critics_score: 91
+
+<br />
+
+Sources:
+https://www.imdb.com/title/tt3783958/?ref_=tt_rt
+https://www.rottentomatoes.com/m/la_la_land
+
+```{r create-predicition}
+lalaland <- data.frame(genre = c("Comedy"), 
+                        thtr_rel_year = 2016,
+                        best_pic_nom = "yes",
+                        best_pic_win = "no",
+                        best_dir_win = "yes",
+                        top200_box = "no", 
+                        critics_rating = "Certified Fresh",
+                        audience_score = 81)
+
+round(predict(m10, lalaland, digits = 0, interval = 'prediction', level = 0.99), digits = 0)
+
+```
+
+When choosing our confidence interval at 99%, the true number of IMDb votes of 478,139 falls within the CI of (28741, 528205).
+
+* * *
+
+## Part 6: Conclusion
+
+In this analysis, we perform EDA on the dataset comprised of 600+ randomly sampled movies produced and released before 2016 and their attributes including such as number of IMDb votes, IMDb rating, genre, runtime, etc. The objective is to explore variables associated with popular movies. 
+<br />
+<br />
+We measure a movie's popularity using the number of IMDb votes. We then build a multiple linear regression model using backward elimination with p-value. In this model, we use genre, theater release year, best picture Oscar win, best director Oscar win, top 200 box office, critics rating, audience score to predict the movie's popularity measured by the number of IMDb votes.
+<br />
+<br />
+We then use the model to predict the number of IMDb votes for the movie La La Land (2016). The true number of votes falls within the 99% confidence interval produced by the model. There is a possibility that constructing a MLR model using adjusted R squared instead of p-value could yield a more reliable model. 
+<br />
+<br />
+Last but not least, we draw several interesting insights from our EDA:
+<br />
+- Drama movies have a substiantially higher number of IMDb votes than movies in other genre in the dataset
+<br />
+- Drama movies released during the holidays (December) and the summer are more popular compared to other drame movies released in the remaining of the year in the dataset. The same is true for action movies released in the summer. 
+<br />
+<br />
+<br />
+<br />
+<br />
+
+
+
